@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>켐원 품목 조회</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      background-color: #f7f7f7;
+      max-width: 1000px;
+      margin: auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    input[type="text"], button {
+      font-size: 1rem;
+    }
+    input[type="text"] {
+      width: 75%;
+      padding: 0.5rem;
+    }
+    button {
+      padding: 0.55rem 1rem;
+      margin-left: 0.5rem;
+      background-color: #1d4ed8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin: 1rem 0;
+      align-items: center;
+    }
+    .filters select {
+      padding: 0.4rem;
+    }
+    .card {
+      background: white;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 8px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      white-space: pre-wrap;
+    }
+    .card p {
+      margin: 0.3rem 0;
+    }
+    .pagination {
+      display: flex;
+      justify-content: center;
+      margin-top: 1rem;
+      gap: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>켐원 품목 조회</h1>
+
+  <div style="margin-top: 1rem; display: flex;">
+    <input type="text" id="searchInput" placeholder="검색어 입력 (품목명, 코드, CAS 등)" />
+    <button id="searchBtn">검색</button>
+  </div>
+
+  <div class="filters">
+    <select id="groupFilter"><option value="">==카테고리 선택==</option></select>
+    <select id="buyerFilter"><option value="">==업체 선택==</option></select>
+    <button id="resetGroupFilter">카테고리 초기화</button>
+  </div>
+
+  <div id="results"></div>
+  <div class="pagination">
+    <button id="prevPage">이전</button>
+    <span id="pageInfo"></span>
+    <button id="nextPage">다음</button>
+  </div>
+
+  <script>
+    let allData = [];
+    let currentPage = 1;
+    const itemsPerPage = 10;
+
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+    const groupFilter = document.getElementById('groupFilter');
+    const buyerFilter = document.getElementById('buyerFilter');
+    const resetGroupFilterBtn = document.getElementById('resetGroupFilter');
+    const resultsDiv = document.getElementById('results');
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    const pageInfo = document.getElementById('pageInfo');
+
+    fetch('data.json')
+      .then(response => response.json())
+      .then(data => {
+        allData = data.map(row => {
+          const cleaned = {};
+          for (let key in row) {
+            const cleanKey = key.replace(/\t/g, '').trim();
+            const cleanVal = typeof row[key] === 'string' ? row[key].replace(/\t/g, '').trim() : row[key];
+            cleaned[cleanKey] = cleanVal;
+          }
+          return cleaned;
+        });
+        populateFilters();
+        renderResults();
+      });
+
+    searchBtn.addEventListener('click', () => {
+      currentPage = 1;
+      renderResults();
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        currentPage = 1;
+        renderResults();
+      }
+    });
+
+    [groupFilter, buyerFilter].forEach(el => {
+      el.addEventListener('change', () => {
+        currentPage = 1;
+        renderResults();
+      });
+    });
+
+    resetGroupFilterBtn.addEventListener('click', () => {
+      groupFilter.selectedIndex = 0;
+      buyerFilter.selectedIndex = 0;
+      currentPage = 1;
+      renderResults();
+    });
+
+    prevPageBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderResults();
+      }
+    });
+
+    nextPageBtn.addEventListener('click', () => {
+      if (currentPage < getTotalPages()) {
+        currentPage++;
+        renderResults();
+      }
+    });
+
+    function populateFilters() {
+      populateSelect(groupFilter, [...new Set(allData.map(row => row['품목그룹']).filter(Boolean))], '==카테고리 선택==');
+      populateSelect(buyerFilter, [...new Set(allData.map(row => row['구매처']).filter(Boolean))], '==업체 선택==');
+    }
+
+    function populateSelect(select, options, defaultLabel) {
+      select.innerHTML = `<option value="">${defaultLabel}</option>`;
+      options.forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt;
+        o.textContent = opt;
+        select.appendChild(o);
+      });
+    }
+
+    function getFilteredData() {
+      const keyword = searchInput.value.toLowerCase();
+      const groupVal = groupFilter.value;
+      const buyerVal = buyerFilter.value;
+
+      return allData.filter(row => {
+        const rowValues = Object.values(row).join(' ').toLowerCase();
+        const keywordMatch = rowValues.includes(keyword);
+        const groupMatch = !groupVal || row['품목그룹'] === groupVal;
+        const buyerMatch = !buyerVal || row['구매처'] === buyerVal;
+        return keywordMatch && groupMatch && buyerMatch;
+      });
+    }
+
+    function getTotalPages() {
+      return Math.ceil(getFilteredData().length / itemsPerPage);
+    }
+
+    function renderResults() {
+      const data = getFilteredData();
+      const start = (currentPage - 1) * itemsPerPage;
+      const end = start + itemsPerPage;
+      const pageData = data.slice(start, end);
+
+      resultsDiv.innerHTML = pageData.map(row => {
+        const knownKeys = [
+          '품목그룹', '품목코드', '브랜드', '구매처', '품목명', '품목이슈', '규격정보',
+          '입고단가', '출고단가', 'CAS No.', 'Purity', 'NCIS', '수입명세서', '신고면제',
+          '유해화학물판매업신고', '유해화학물 시약판매업신고', '유독물수입신고', '제한물질수입신고',
+          'HScode', 'COA NAME', 'IUPAC NAME', '원산지', '검색창내용', '비고', '안전재고수량',
+          '사용', '최종수정자', '최초작성일자', '최초작성자'
+        ];
+
+        const rows = knownKeys.map(key => {
+          const value = row[key];
+          return value ? `<p><strong>${key}</strong>: ${value}</p>` : '';
+        }).join('');
+
+        return `<div class="card">${rows}</div>`;
+      }).join('') || '<p>검색 결과가 없습니다.</p>';
+
+      pageInfo.textContent = `페이지 ${currentPage} / ${getTotalPages()}`;
+    }
+  </script>
+</body>
+</html>
